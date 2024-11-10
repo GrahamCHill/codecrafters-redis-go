@@ -2,13 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 )
-
-// Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
-var _ = net.Listen
-var _ = os.Exit
 
 func main() {
 	fmt.Println("tcp", "0.0.0.0:6379")
@@ -49,12 +48,42 @@ func handleConnection(conn net.Conn) {
 		}
 	}(conn)
 
-	// Hardcoded response for testing purposes
-	response := "+PONG\r\n"
+	buff := make([]byte, 1024)
 
-	// Write the response to client
-	_, err := conn.Write([]byte(response))
-	if err != nil {
-		fmt.Println("Failed to send response", err.Error())
+	for {
+		length, err := conn.Read(buff)
+		if err != nil {
+			log.Println("Connection read error or closed:", err)
+			return
+		}
+
+		rawData := string(buff[:length])
+		lines := strings.Split(rawData, "\n")
+
+		if len(lines) > 0 && strings.HasPrefix(lines[0], "*") {
+			var elements []string
+			for i := 1; i < len(lines); i++ {
+				if strings.HasPrefix(lines[i], "$") {
+					elementLength, err := strconv.Atoi(strings.Trim(lines[i][1:], "\r"))
+					if err != nil {
+						log.Println("Error parsing element length:", err)
+						return
+					}
+					if i+1 < len(lines) && len(strings.Trim(lines[i+1], "\r")) == elementLength {
+						elements = append(elements, strings.Trim(lines[i+1], "\r"))
+						i++ // Skip the next line as it is part of the current element
+					}
+				}
+			}
+			// Check for PING command
+			response := "+PONG\r\n"
+			if len(elements) == 1 && elements[0] == "PING" {
+				_, err := conn.Write([]byte(response))
+				if err != nil {
+					log.Println("Failed to send response:", err)
+				}
+				continue // Continue to listen for next inputs
+			}
+		}
 	}
 }
