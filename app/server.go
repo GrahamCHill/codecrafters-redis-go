@@ -75,14 +75,36 @@ func handleConnection(conn net.Conn) {
 					}
 				}
 			}
-			// Check for PING command
-			response := "+PONG\r\n"
-			if len(elements) == 1 && elements[0] == "PING" {
-				_, err := conn.Write([]byte(response))
-				if err != nil {
-					log.Println("Failed to send response:", err)
+
+			// Handling Multiple Redis commands
+			if len(elements) > 0 {
+				command := strings.ToUpper(elements[0])
+
+				switch command {
+				case "PING":
+					_, err := conn.Write([]byte("+PONG\r\n"))
+					if err != nil {
+						log.Println("Failed to send PONG RESPONSE", err)
+					}
+				case "ECHO":
+					if len(elements) == 2 {
+						response := fmt.Sprintf("$%d\r\n%s\r\n", len(elements[1]), elements[1])
+						_, err := conn.Write([]byte(response))
+						if err != nil {
+							log.Println("Failed to send ECHO RESPONSE", err)
+						}
+					} else {
+						_, err := conn.Write([]byte("-ERR wong number of arguments provided for 'ECHO' command\r\n"))
+						if err != nil {
+							log.Println("Failed to send ECHO error RESPONSE", err)
+						}
+					}
+				default:
+					_, err := conn.Write([]byte("-ERR unknown command\r\n"))
+					if err != nil {
+						log.Println("Failed to send ECHO RESPONSE", err)
+					}
 				}
-				continue // Continue to listen for next inputs
 			}
 		}
 	}
